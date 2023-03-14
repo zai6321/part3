@@ -1,9 +1,10 @@
 const express = require('express')
 const app = express()
 var morgan = require('morgan')
-
+const cors = require('cors')
+app.use(cors())
 app.use(express.json())
-
+app.use(express.static('build'))
 // create custome message in the middleweare s
 morgan.token('ob', function (req, res) { 
     console.log("ob", req.body)
@@ -15,22 +16,22 @@ app.use(morgan(':method :url :status :response-time :req[header] :ob'))
 let persons = [
     {
         "name": "Arto Hellas",
-        "number": "123",
+        "phone": "123",
         "id": 1
     },
     {
         "name": "Dan Abramov",
-        "number": "12-43-234345",
+        "phone": "12-43-234345",
         "id": 2
     },
     {
         "name": "Nikko Ce",
-        "number": "123-12-1",
+        "phone": "123-12-1",
         "id": 3
     },
     {
         "name": "Nldskjl Ce",
-        "number": "1232-21-1",
+        "phone": "1232-21-1",
         "id": 4
     }
 ]
@@ -53,9 +54,9 @@ app.post('/api/persons', (request, response) => {
       })
     }
 
-    if (!body.number) {
+    if (!body.phone) {
         return response.status(400).json({ 
-          error: 'number missing' 
+          error: 'phone missing' 
         })
       }
 
@@ -68,7 +69,7 @@ app.post('/api/persons', (request, response) => {
   
     let person = {
       name: body.name,
-      number: body.number,
+      phone: body.phone,
       id: generateId(),
     }
   
