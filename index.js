@@ -1,112 +1,132 @@
-const express = require('express')
-const app = express()
-var morgan = require('morgan')
-const cors = require('cors')
-app.use(cors())
-app.use(express.json())
-app.use(express.static('build'))
+require("dotenv").config();
+const express = require("express");
+const app = express();
+var morgan = require("morgan");
+const cors = require("cors");
+const Person = require("./models/person");
+
+app.use(express.json());
+app.use(cors());
+app.use(express.static("build"));
+
+const errorHandler = (error, request, response, next) => {
+	console.log("errorHandler called");
+
+	if (error.name === "CastError") {
+		return response.status(400).send({ error: "malformatted id" });
+	}
+
+	next(error);
+};
+
+app.use(errorHandler);
+
 // create custome message in the middleweare s
-morgan.token('ob', function (req, res) { 
-    console.log("ob", req.body)
-    return `${JSON.stringify(req.body)}` })
+morgan.token("ob", function (req, res) {
+	return `${JSON.stringify(req.body)}`;
+});
 
-app.use(morgan(':method :url :status :response-time :req[header] :ob'))
+app.use(morgan(":method :url :status :response-time :req[header] :ob"));
 
+app.post("/api/persons", (request, response) => {
+	const body = request.body;
+	// console.log(body)
 
-let persons = [
-    {
-        "name": "Arto Hellas",
-        "phone": "123",
-        "id": 1
-    },
-    {
-        "name": "Dan Abramov",
-        "phone": "12-43-234345",
-        "id": 2
-    },
-    {
-        "name": "Nikko Ce",
-        "phone": "123-12-1",
-        "id": 3
-    },
-    {
-        "name": "Nldskjl Ce",
-        "phone": "1232-21-1",
-        "id": 4
-    }
-]
+	if (!body.name) {
+		return response.status(400).json({
+			error: "name missing",
+		});
+	}
 
-const generateId = () =>{
-    const maxID = persons.length > 0
-    ? Math.max( ...persons.map(n => n.id))
-    : 0
-    return maxID +1
-}
+	if (!body.phone) {
+		return response.status(400).json({
+			error: "phone missing",
+		});
+	}
 
+	///
+	Person.find({}).then((persons) => {
+		console.log("persons: ", persons);
 
-app.post('/api/persons', (request, response) => {
-    const body = request.body
-    // console.log(body)
-  
-    if (!body.name) {
-      return response.status(400).json({ 
-        error: 'name missing' 
-      })
-    }
+		if (persons.some((person) => person.name === body.name)) {
+			console.log("name must be unique");
+			return response.status(400).json({
+				error: "name must be unique",
+			});
+		}
 
-    if (!body.phone) {
-        return response.status(400).json({ 
-          error: 'phone missing' 
-        })
-      }
+		let person = new Person({
+			name: body.name,
+			phone: body.phone,
+		});
+		// id: generateId(),
 
-    if(persons.some(person => person.name === body.name)){
-        return response.status(400).json({ 
-            error: 'name must be unique' 
-          })
+		// save in mongod DV
+		person.save().then((savedPerson) => {
+			console.log("savedPerson", savedPerson);
+			response.json(savedPerson);
+		});
+	});
+});
 
-    }
-  
-    let person = {
-      name: body.name,
-      phone: body.phone,
-      id: generateId(),
-    }
-  
-    persons = persons.concat(person)
-  
-    response.json(person)
-  })
+app.get("/api/persons", (req, res) => {
+	Person.find({}).then((persons) => {
+		console.log("get/api/persons", persons);
+		res.json(persons.map((person) => person.toJSON()));
+	});
 
+	// Person.find({}).then(result => {
+	//     res.json(result)
+	// })
+});
 
-app.get('/api/persons', (req, res) => {
-    res.json(persons)
-})
+app.get("/api/info", (req, res) => {
+	const utcDate1 = new Date(Date.now());
+	let personsLength = 0;
+	Person.find({}).then((persons) => {
+		personsLength = persons.length;
+		res.send(
+			`<p> Phonebook has info for ${personsLength} people </p> <p> ${utcDate1.toUTCString()}</p>`
+		);
+	});
+});
 
-app.get('/api/info', (req, res) => {
-    const utcDate1 = new Date(Date.now());
-    res.send(`<p> Phonebook has info for ${persons.length} people </p> <p> ${utcDate1.toUTCString()}</p>`)
-})
+app.get("/api/persons/:id", (req, res, next) => {
+	const id = req.params.id;
+	Person.findById(req.params.id)
+		.then((person) => {
+			res.json(person);
+		})
+		.catch((error) => res.status(404).end());
+});
 
-app.get('/api/persons/:id', (req, res) => {
-    const id = req.params.id
-    const person = persons.find(person => { return person.id == id })
+app.delete("/api/persons/:id", (req, res, next) => {
+	const id = req.params.id;
+	console.log(id, typeof id);
 
-    if (person) {
-        res.json(person)
-    }
-    else {
-        res.status(404).end()
-    }
-})
+	// persons = persons.filter(person => person.id != id)
+	// res.status(204).end()
+	Person.findByIdAndRemove(id)
+		.then((result) => {
+			res.status(204).end();
+		})
+		.catch((error) => next(error));
+});
 
-app.delete('/api/persons/:id', (req, res) => {
-    const id = Number(req.params.id)
-    persons = persons.filter(person => person.id != id)
-    res.status(204).end()
-})
+app.put("/api/persons/:id", (request, response, next) => {
+	const body = request.body;
+	const person = {
+		number: body.number,
+	};
 
-const PORT = 3001
+	Person.findByIdAndUpdate(request.params.id, person, { new: true })
+		.then((updatedPerson) => {
+			response.json(updatedPerson);
+		})
+		.catch((error) => next(error));
+});
+
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-    console.log(`server running on port ${PORT}`)
-})
+	console.log(`server running on port ${PORT}`);
+});
